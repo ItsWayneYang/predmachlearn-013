@@ -1,0 +1,64 @@
+---
+title: "Predict quality of weight lifting exercises"
+author: "Wayne Yang"
+date: "April 24, 2015"
+output: html_document
+---
+
+```{r load_packages, include=FALSE}
+library(caret)
+library(randomForest)
+```
+
+## Overview
+This project is to build a classification model to predict the "classe" variable from weight lifting exercise data gathered from sensor data.
+
+Random Forest is the algorithm chosen to build the classification model for its accuracy and its internal unbiased estimate of generalization error.
+
+### Preprocess
+
+There are 160 variables for each observation in this data set.  Many of those variables have missing values.  The first step of preprocess is to remove columns containing mostly missing values from the data frame loaded from the csv file.  This leaves 60 variables in the remanining data set.  Secondly,  the column "X" contains a serial number which can also be safely removed.
+
+```{r}
+pml <- read.csv("pml-training.csv", na.strings = c("NA", "#DIV/0!"))
+
+# calculate % of missing values from 1000 samples
+# drop columns that have more than 90% NA values
+na_means <- sapply(pml[sample(nrow(pml), 1000),], function(x) mean(is.na(x)))
+good_data <- pml[, na_means < 0.1]
+
+# remove columns drop_cols from data frame
+drop_cols <- c("X", "cvtd_timestamp")
+good_data <- good_data[, !(names(good_data) %in% drop_cols)]
+
+# convert new_window into integer
+good_data$new_window <- as.integer(good_data$new_window)
+```
+
+### Random Forest
+According to [1], random forest model does not require cross-validation and can use out-of-bag (oob) error estimate which is proven to be unbiased in many test.  So, all of the data would be used for training a random forest model with 500 trees and mtry=7 which are both default values.  The oob estimate of error rate is ~0.06%.
+
+```{r}
+fit <- randomForest(classe ~ ., data=good_data, ntree=500, importance=TRUE)
+print(fit)
+```
+
+The variable importance generated from the model shows that the variable `raw_timestamp_part_1` contributes the most to the model's accuracy.
+
+```{r, echo=FALSE, fig.width=16}
+varImpPlot(fit)
+```
+
+The model can be then applied to the test data as follows
+
+```{r}
+testing <- read.csv("pml-testing.csv", na.strings = c("NA", "#DIV/0!"))
+testing <- testing[, na_means < 0.1]
+testing <- testing[, !(names(testing) %in% drop_cols)]
+testing$new_window <- as.integer(testing$new_window)
+pred <- predict(fit, testing)
+```
+
+## References
+
+[1] Leo Breiman and Adele Cutler, Random Forest, http://www.stat.berkeley.edu/~breiman/RandomForests/cc_home.htm#workings
